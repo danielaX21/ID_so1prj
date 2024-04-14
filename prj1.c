@@ -25,7 +25,7 @@ void close_directory(DIR **dir_ptr) {
 }
 
 void write_snapshot(int file, const char* data) {
-    if (write(fd, data, strlen(data)) < 0) {
+    if (write(file, data, strlen(data)) < 0) {
         printf("Eroare la scrierea in fisier.\n");
         exit(3);
     }
