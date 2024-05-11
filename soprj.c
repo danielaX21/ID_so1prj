@@ -36,10 +36,10 @@ void write_snapshot(int file, const char* data) {
 void create_snapshot(const char* directory_name, const char* output_directory) {
 
     char snapshot_path[1024];
-	// Construim calea către fișierul de snapshot folosind directorul de ieșire și numele directorului
-	 snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot_%s.txt", output_directory, directory_name);
-	 // Deschidem fișierul de snapshot
- int newfile = open(snapshot_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH); // deschide fișierul sau creează-l dacă nu există
+    // Construim calea către fișierul de snapshot folosind directorul de ieșire și numele directorului
+    snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot_%s.txt", output_directory, directory_name);
+    // Deschidem fișierul de snapshot
+    int newfile = open(snapshot_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH); // deschide fișierul sau creează-l dacă nu există
     if (newfile <0) {
         printf("Eroare la deschiderea fisierului de snapshot-uri.\n");
         exit(1);
@@ -51,9 +51,6 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
 
     open_directory(directory_name, &dir);
 
-      
-   
-
     // Parcurgem directorul și scriem informațiile despre fișiere în fișierul de snapshot
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
@@ -61,8 +58,8 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
             snprintf(file_path, sizeof(file_path), "%s/%s", directory_name, entry->d_name);
             if (lstat(file_path, &file_info) < 0) {
                 printf("Eroare la citirea informatiei despre fisier: %s\n", file_path);
-            } 	
-			else {
+            }
+            else {
                 char file_type[1000];
                 if (S_ISREG(file_info.st_mode)) {
                     strcpy(file_type, "Regular file");
@@ -78,15 +75,29 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
                     strcpy(file_type, "Unknown");
                 }
 
+                char permissions[10];
+                //snprintf(permissions, sizeof(permissions), "%o", file_info.st_mode & 0777);
+            snprintf(permissions, sizeof(permissions), "%c%c%c%c%c%c%c%c%c",
+                         (file_info.st_mode & S_IRUSR) ? 'r' : '-',
+                         (file_info.st_mode & S_IWUSR) ? 'w' : '-',
+                         (file_info.st_mode & S_IXUSR) ? 'x' : '-',
+                         (file_info.st_mode & S_IRGRP) ? 'r' : '-',
+                         (file_info.st_mode & S_IWGRP) ? 'w' : '-',
+                         (file_info.st_mode & S_IXGRP) ? 'x' : '-',
+                         (file_info.st_mode & S_IROTH) ? 'r' : '-',
+                         (file_info.st_mode & S_IWOTH) ? 'w' : '-',
+                         (file_info.st_mode & S_IXOTH) ? 'x' : '-');
                 char buffer[1024]; // Alocare de memorie pt a construi șirul de date
                 int n = snprintf(buffer, sizeof(buffer), "\nFile Name:                  %s\n"
                                                             "File Type:                  %s\n"
+                                                            "Permissions:                %s\n"
                                                             "Inode Number:               %ju\n"
                                                             "Last Status Change:         %s"
                                                             "Last File Access:           %s"
                                                             "Last File Modification:     %s\n",
                                     entry->d_name,
                                     file_type,
+                                    permissions,
                                     file_info.st_ino,
                                     ctime(&file_info.st_ctime),
                                     ctime(&file_info.st_atime),
@@ -94,8 +105,7 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
                 if (n < 0) {
                     printf("Eroare la construirea datelor pentru fisierul: %s\n", file_path);
                 } else {
-                    
-                    write_snapshot(newfile, buffer);// Scrierea datelor în fișier
+                    write_snapshot(newfile, buffer); // Scrierea datelor în fișier
                 }
             }
         }
@@ -103,12 +113,11 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
 
     // Închidem fișierul de snapshot
     close_directory(&dir);
-	close(newfile);
+    close(newfile);
 }
 
-// void traverse_directory(const char* directory_name, int level,int file) {
-   void traverse_directory(const char* directory_name, const char* output_directory, int level) {
 
+void traverse_directory(const char* directory_name, const char* output_directory, int level) {
     DIR *dir;
     struct dirent *entry;
     struct stat file_info;
@@ -120,8 +129,10 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
     }
     printf("|_ %s\n", directory_name);
 
-    create_snapshot(directory_name, output_directory);
+    // Verificăm drepturile de acces ale directorului
+    check_file_permissions(directory_name);
 
+    // Parcurgem directorul și verificăm drepturile de acces pentru fiecare fișier și director
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
             char file_path[1000];
@@ -144,19 +155,59 @@ void create_snapshot(const char* directory_name, const char* output_directory) {
     close_directory(&dir);
 }
 
-
-
-
 void create_output_directory(const char* output_directory) {
     struct stat st;
     if (stat(output_directory, &st) == -1) {
         // Directorul nu există, îl creăm
-        if (mkdir(output_directory, 0700) == -1) {
+        if (mkdir(output_directory, 0777) == -1) {
             perror("Eroare la crearea directorului de iesire\n");
             exit(EXIT_FAILURE);
         } else {
             printf("Directorul de iesire \"%s\" a fost creat cu succes.\n", output_directory);
         }
+    }
+}
+
+void create_child_processes(char* output_directory, char* unique_directories[], int unique_count) {
+    // Parcurgem directoarele unice și creăm snapshot-urile în procese copil
+    for (int i = 0; i < unique_count; i++) {
+        pid_t pid = fork(); // Creăm un proces copil
+
+        if (pid == -1) {
+            // Eroare la fork
+            perror("Eroare la fork!\n");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            // Suntem în procesul copil
+            traverse_directory(unique_directories[i], output_directory, 0); // Call traverse_directory here
+            
+            create_snapshot(unique_directories[i], output_directory);
+            printf("Snapshot pentru '%s' creat cu succes.\n", unique_directories[i]);
+            exit(EXIT_SUCCESS);
+        }
+    }
+
+    // Așteptăm terminarea tuturor proceselor copil
+    int status;
+    pid_t wpid;
+    while ((wpid = wait(&status)) > 0) {
+        if (WIFEXITED(status)) {
+            printf("Procesul copil %d a fost terminat cu codul de ieșire %d.\n", wpid, WEXITSTATUS(status));
+        } else {
+            printf("Procesul copil %d a fost terminat în mod anormal.\n", wpid);
+        }
+    }
+}
+
+void check_file_permissions(const char* file_path) {
+    struct stat file_stat;
+    if (stat(file_path, &file_stat) == 0) {
+        printf("Drepturi de acces pentru '%s':\n", file_path);
+        printf("Owner: %s%s%s\n", (file_stat.st_mode & S_IRUSR) ? "r" : "-", (file_stat.st_mode & S_IWUSR) ? "w" : "-", (file_stat.st_mode & S_IXUSR) ? "x" : "-");
+        printf("Group: %s%s%s\n", (file_stat.st_mode & S_IRGRP) ? "r" : "-", (file_stat.st_mode & S_IWGRP) ? "w" : "-", (file_stat.st_mode & S_IXGRP) ? "x" : "-");
+        printf("Others: %s%s%s\n", (file_stat.st_mode & S_IROTH) ? "r" : "-", (file_stat.st_mode & S_IWOTH) ? "w" : "-", (file_stat.st_mode & S_IXOTH) ? "x" : "-");
+    } else {
+        printf("Eroare la verificarea drepturilor de acces pentru '%s'\n", file_path);
     }
 }
 
@@ -201,32 +252,8 @@ int main(int argc, char** argv) {
     // Creăm directorul de ieșire dacă nu există deja
     create_output_directory(output_directory);
 
-    // Parcurgem directoarele unice și creăm snapshot-urile în procese copil
-    for (int i = 0; i < unique_count; i++) {
-        pid_t pid = fork(); // Creăm un proces copil
-
-        if (pid == -1) {
-            // Eroare la fork
-            perror("Eroare la fork!\n");
-            exit(EXIT_FAILURE);
-        } else if (pid == 0) {
-            // Suntem în procesul copil
-            create_snapshot(unique_directories[i], output_directory);
-            printf("Snapshot pentru '%s' creat cu succes.\n", unique_directories[i]);
-            exit(EXIT_SUCCESS);
-        }
-    }
-
-    // Așteptăm terminarea tuturor proceselor copil
-    int status;
-    pid_t wpid;
-    while ((wpid = wait(&status)) > 0) {
-        if (WIFEXITED(status)) {
-            printf("Procesul copil %d a fost terminat cu codul de ieșire %d.\n", wpid, WEXITSTATUS(status));
-        } else {
-            printf("Procesul copil %d a fost terminat în mod anormal.\n", wpid);
-        }
-    }
+    // Apelăm funcția care creează procesele copil
+    create_child_processes(output_directory, unique_directories, unique_count);
 
     return 0;
 }
