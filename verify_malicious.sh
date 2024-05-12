@@ -1,51 +1,46 @@
 #!/bin/bash
 
-# Set permissions to read-only
-chmod 400 "$1"
-
-file_path="$1"
-file_name="$2"
-isolate_dir="Isolated"
-
-# Count lines, words, and characters in the file
-line_count=$(wc -l < "$file_path")
-word_count=$(wc -w < "$file_path")
-char_count=$(wc -c < "$file_path")
-
-# Check if the file exists
-if [ ! -f "$file_path" ]; then
-    echo "File not found: $file_name"
+ #echo "Scriptul ruleaza"
+echo "MALICIOUS"
+# Verifică dacă numărul de argumente este corect
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <file>"
     exit 1
 fi
 
-# Define keywords to check for suspicious content
-keywords=("corrupted" "dangerous" "risk" "attack" "malware" "malicious")
-suspect=0
+file="$1"
 
-# Check if the file meets the criteria for suspicion
-if [ "$line_count" -lt 3 ] && [ "$word_count" -gt 10 ] && [ "$char_count" -gt 20 ]; then
-    suspect=1
+# Verifică drepturile de acces ale fișierului
+if [ "$(stat -c "%a" "$file")" -eq 0 ]; then
+    #echo "$file are toate drepturile setate la 0"
+    echo "$file MALICIOUS"
+    exit 0
+fi
+# Numărul minim de linii, cuvinte și caractere
+min_lines=3
+min_words=1000
+min_chars=2000
+
+# Verifică dacă fișierul există
+if [ ! -f "$file" ]; then
+    echo "File not found: $file"
+    exit 1
 fi
 
-# Check for keywords and non-ASCII characters if the file is suspected
-if [ $suspect -eq 1 ]; then
-    for keyword in "${keywords[@]}"; do
-        if grep -q "$keyword" "$file_path"; then
-            echo "$file_name"
-            exit 0
-        fi
-    done
+# Verifică numărul de linii, cuvinte și caractere
+num_lines=$(wc -l < "$file")
+num_words=$(wc -w < "$file")
+num_chars=$(wc -m < "$file")
 
-    # Check for non-ASCII characters
-    if grep -q -P '[^\x00-\x7F]' "$file_path"; then
-        echo "$file_name"
-        exit 0
+# Verifică dacă fișierul este suspect
+if [ "$num_lines" -lt "$min_lines" ] && [ "$num_words" -gt "$min_words" ] && [ "$num_chars" -gt "$min_chars" ]; then
+    # Verifică dacă există caractere non-ASCII sau cuvinte cheie
+    if grep -q -P '[^\x00-\x7F]' "$file" || grep -q -E 'corrupted|dangerous|risk|attack|malware|malicious' "$file"; then
+        echo "$file MALICIOUS"
+    else
+        echo "$file SAFE"
     fi
-
-    echo "SAFE"
 else
-    echo "SAFE"
+    echo "$file SAFE"
 fi
 
-# Reset permissions to no access
-chmod 000 "$1"
