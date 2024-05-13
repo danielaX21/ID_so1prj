@@ -1,21 +1,18 @@
 #!/bin/bash
 
- #echo "Scriptul ruleaza"
-echo "MALICIOUS"
 # Verifică dacă numărul de argumente este corect
 if [ $# -ne 1 ]; then
-    echo "Usage: $0 <file>"
     exit 1
 fi
 
-file="$1"
+file=$1
 
 # Verifică drepturile de acces ale fișierului
 if [ "$(stat -c "%a" "$file")" -eq 0 ]; then
-    #echo "$file are toate drepturile setate la 0"
     echo "$file MALICIOUS"
     exit 0
 fi
+
 # Numărul minim de linii, cuvinte și caractere
 min_lines=3
 min_words=1000
@@ -26,6 +23,9 @@ if [ ! -f "$file" ]; then
     echo "File not found: $file"
     exit 1
 fi
+
+# Redirecționează ieșirea standard către pipe-ul folosit de programul C
+#exec > /dev/fd/3  # FD 3 este descriptorul de fișier asociat cu pipe-ul
 
 # Verifică numărul de linii, cuvinte și caractere
 num_lines=$(wc -l < "$file")
