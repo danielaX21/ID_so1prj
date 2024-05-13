@@ -34,10 +34,11 @@ void write_snapshot(int file, const char* data) {
 }
 
 char* check_for_malicious(const char* file_path, const char* file_name) {
-   
     char* result = NULL;
     int pipefd[2];
     pid_t pid;
+    int status;
+
 
     if (pipe(pipefd) == -1) {
         perror("Error creating pipe");
@@ -52,25 +53,30 @@ char* check_for_malicious(const char* file_path, const char* file_name) {
     }
 
     if (pid == 0) { // Child process
-        close(pipefd[0]); 
-        dup2(pipefd[1], STDOUT_FILENO); 
-        close(pipefd[1]); 
-
-        execl("./verify_malicious.sh", "./verify_malicious.sh", file_path, file_name, NULL);
-
+        close(pipefd[0]); //inchide capatul de citire al pipe ului
+        dup2(pipefd[1], 1); //Redirectioneaza stdout catre capatul de scriere al pipe-ului
+        //close(pipefd[1]); 
+        char  *comanda[]={"./verify_malicious.sh",file_path,file_name,NULL};
+        //execl("./verify_malicious.sh", "./verify_malicious.sh", file_path, file_name, NULL);
+        if(execvp(comanda[0], comanda)==-1){
         perror("Error executing script");
         exit(EXIT_FAILURE);
-    } else { // Parent process
+    } 
+    }
+    //else { // Parent process
         close(pipefd[1]); // Close writing end of pipe
         result = (char*)malloc(MAX_BUFFER_SIZE * sizeof(char));
         if (result == NULL) {
             perror("Error allocating memory");
             exit(EXIT_FAILURE);
         }
-        read(pipefd[0], result, MAX_BUFFER_SIZE); // Read from pipe
-        close(pipefd[0]); // Close reading end of pipe
-        wait(NULL); // Wait for child process to finish
-    }
+        dup2(pipefd[0], 0); //redirectioneaza stdin catre capatul de scriere al pipe ului
+        read(0, result, MAX_BUFFER_SIZE); // citeste din pipe
+        close(pipefd[0]); // inchide capatul de citire
+        wait(&status); // asteapta sa se termine procesul copil
+        
+        
+   
 
 struct stat file_stat;
     if (stat(file_path, &file_stat) == 0) {
@@ -86,11 +92,65 @@ struct stat file_stat;
         exit(EXIT_FAILURE);
     }
     
+   
     return result;
+    
 }
 
+
+/*
+char* check_for_malicious(const char* file_path, const char* file_name) {
+    char* result = NULL;
+    int pipefd[2];
+    pid_t pid;
+    int status;
+
+    if (pipe(pipefd) == -1) {
+        perror("Error creating pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    pid = fork();
+
+    if (pid == -1) {
+        perror("Error forking process");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) { // Child process
+        close(pipefd[0]); // Close reading end of pipe
+        dup2(pipefd[1], STDOUT_FILENO); // Redirect stdout to pipe
+        close(pipefd[1]); // Close unused writing end of pipe
+        char *comanda[] = {"./verify_malicious.sh", file_path, NULL};
+        if (execvp(comanda[0], comanda) == -1) {
+            perror("Error executing script");
+            exit(EXIT_FAILURE);
+        }
+    } else { // Parent process
+        close(pipefd[1]); // Close writing end of pipe
+        result = (char*)malloc(MAX_BUFFER_SIZE * sizeof(char));
+        if (result == NULL) {
+            perror("Error allocating memory");
+            exit(EXIT_FAILURE);
+        }
+        FILE *fp = fdopen(pipefd[0], "r"); // Open pipe for reading
+        if (fp == NULL) {
+            perror("Error opening pipe for reading");
+            exit(EXIT_FAILURE);
+        }
+        fgets(result, MAX_BUFFER_SIZE, fp); // Read from pipe
+        printf("Result from pipe: %s\n", result); // Print the result read from the pipe
+        fclose(fp); // Close file pointer
+        close(pipefd[0]); // Close reading end of pipe
+        wait(&status); // Wait for child process to finish
+    }
+
+    return result;
+}
+*/
+
+
 void isolate_malicious(const char* source_dir, const char* suspect_file, const char* isolated_dir) {
-    
     char source_path[strlen(source_dir) + strlen(suspect_file) + 2];
     strcpy(source_path, source_dir);
     strcat(source_path, "/");
@@ -108,7 +168,6 @@ void isolate_malicious(const char* source_dir, const char* suspect_file, const c
         perror("Error moving file");
         exit(EXIT_FAILURE);
     }
-    printf("dfg\n");
    
 }
 
@@ -138,7 +197,6 @@ void create_snapshot(const char* directory_name, const char* output_directory, c
                 printf("Fișierul %s este considerat malitios. Se va muta în directorul izolat.\n", entry->d_name);
                 isolate_malicious(directory_name, entry->d_name, isolated_directory);
                 free(result);
-                printf("SAFE\n");
                 continue; // Trecem la următorul fișier, nu cream snapshot pentru acesta
             }
             free(result);
